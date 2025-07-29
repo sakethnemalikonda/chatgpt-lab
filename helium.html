@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Diatomic Helium Simulation (2D)</title>
+  <style>
+    canvas {
+      background-color: #000;
+      display: block;
+      margin: auto;
+    }
+  </style>
+</head>
+<body>
+<canvas id="canvas" width="800" height="600"></canvas>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const WIDTH = canvas.width;
+const HEIGHT = canvas.height;
+
+const NUM_MOLECULES = 20;
+const RADIUS = 4;
+const BOND_LENGTH = 20;
+const EPSILON = 0.2;  // van der Waals strength
+const SIGMA = 10;
+
+class Atom {
+  constructor(x, y, vx, vy) {
+    this.x = x;
+    this.y = y;
+    this.vx = vx;
+    this.vy = vy;
+  }
+
+  update(dt) {
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+
+    // bounce off walls
+    if (this.x < RADIUS || this.x > WIDTH - RADIUS) this.vx *= -1;
+    if (this.y < RADIUS || this.y > HEIGHT - RADIUS) this.vy *= -1;
+
+    this.x = Math.max(RADIUS, Math.min(WIDTH - RADIUS, this.x));
+    this.y = Math.max(RADIUS, Math.min(HEIGHT - RADIUS, this.y));
+  }
+
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = 'cyan';
+    ctx.fill();
+  }
+}
+
+class Molecule {
+  constructor() {
+    let x = Math.random() * (WIDTH - 2 * BOND_LENGTH) + BOND_LENGTH;
+    let y = Math.random() * (HEIGHT - 2 * RADIUS) + RADIUS;
+    let vx = (Math.random() - 0.5) * 100;
+    let vy = (Math.random() - 0.5) * 100;
+
+    this.a1 = new Atom(x - BOND_LENGTH/2, y, vx, vy);
+    this.a2 = new Atom(x + BOND_LENGTH/2, y, vx, vy);
+  }
+
+  applyBond(dt) {
+    const dx = this.a2.x - this.a1.x;
+    const dy = this.a2.y - this.a1.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const stretch = dist - BOND_LENGTH;
+
+    const k = 5;  // spring constant
+    const force = -k * stretch;
+
+    const fx = force * dx / dist;
+    const fy = force * dy / dist;
+
+    this.a1.vx += fx * dt;
+    this.a1.vy += fy * dt;
+    this.a2.vx -= fx * dt;
+    this.a2.vy -= fy * dt;
+  }
+
+  applyVanDerWaals(other, dt) {
+    for (let atomA of [this.a1, this.a2]) {
+      for (let atomB of [other.a1, other.a2]) {
+        let dx = atomB.x - atomA.x;
+        let dy = atomB.y - atomA.y;
+        let r = Math.sqrt(dx * dx + dy * dy);
+
+        if (r < 2 * BOND_LENGTH && r > 1) {
+          let F = (24 * EPSILON / r) * (2 * (SIGMA / r)**12 - (SIGMA / r)**6);
+          let fx = F * dx / r;
+          let fy = F * dy / r;
+
+          atomA.vx -= fx * dt;
+          atomA.vy -= fy * dt;
+          atomB.vx += fx * dt;
+          atomB.vy += fy * dt;
+        }
+      }
+    }
+  }
+
+  update(dt) {
+    this.applyBond(dt);
+    this.a1.update(dt);
+    this.a2.update(dt);
+  }
+
+  draw() {
+    ctx.beginPath();
+    ctx.moveTo(this.a1.x, this.a1.y);
+    ctx.lineTo(this.a2.x, this.a2.y);
+    ctx.strokeStyle = 'white';
+    ctx.stroke();
+
+    this.a1.draw();
+    this.a2.draw();
+  }
+}
+
+const molecules = [];
+for (let i = 0; i < NUM_MOLECULES; i++) {
+  molecules.push(new Molecule());
+}
+
+let lastTime = performance.now();
+function animate(time) {
+  const dt = (time - lastTime) / 1000;
+  lastTime = time;
+
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
+
+  // Apply van der Waals forces between all molecule pairs
+  for (let i = 0; i < molecules.length; i++) {
+    for (let j = i + 1; j < molecules.length; j++) {
+      molecules[i].applyVanDerWaals(molecules[j], dt);
+    }
+  }
+
+  for (let m of molecules) {
+    m.update(dt);
+    m.draw();
+  }
+
+  requestAnimationFrame(animate);
+}
+
+animate(lastTime);
+</script>
+</body>
+</html>

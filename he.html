@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diatomic Helium Gas Simulation</title>
+  <style>
+    canvas {
+      display: block;
+      margin: 0 auto;
+      background-color: #000;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="simulation" width="800" height="600"></canvas>
+  <script>
+    const canvas = document.getElementById('simulation');
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+
+    const numMolecules = 30;
+    const radius = 4;
+    const bondLength = 20;
+    const molecules = [];
+    const kVanDerWaals = 500; // Strength of Van der Waals force
+    const epsilon = 1.0;
+    const sigma = 10.0;
+
+    function randVel() {
+      return (Math.random() - 0.5) * 200;
+    }
+
+    function distance(a, b) {
+      return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+    }
+
+    function unitVector(a, b) {
+      let dx = b.x - a.x;
+      let dy = b.y - a.y;
+      let mag = Math.sqrt(dx * dx + dy * dy);
+      return { x: dx / mag, y: dy / mag };
+    }
+
+    class Atom {
+      constructor(x, y, vx, vy) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+      }
+
+      update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+
+        if (this.x < radius || this.x > width - radius) this.vx *= -1;
+        if (this.y < radius || this.y > height - radius) this.vy *= -1;
+
+        this.x = Math.max(radius, Math.min(width - radius, this.x));
+        this.y = Math.max(radius, Math.min(height - radius, this.y));
+      }
+
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, radius, 0, 2 * Math.PI);
+        ctx.fillStyle = 'cyan';
+        ctx.fill();
+      }
+    }
+
+    class Molecule {
+      constructor() {
+        let x = Math.random() * (width - 2 * bondLength) + bondLength;
+        let y = Math.random() * (height - 2 * radius) + radius;
+        let vx = randVel(), vy = randVel();
+
+        this.atom1 = new Atom(x - bondLength / 2, y, vx, vy);
+        this.atom2 = new Atom(x + bondLength / 2, y, vx, vy);
+      }
+
+      update(dt) {
+        // Update atoms
+        this.atom1.update(dt);
+        this.atom2.update(dt);
+
+        // Maintain bond with spring-like correction
+        let dx = this.atom2.x - this.atom1.x;
+        let dy = this.atom2.y - this.atom1.y;
+        let dist = Math.sqrt(dx * dx + dy * dy);
+        let force = (dist - bondLength) * 20;
+
+        let fx = (dx / dist) * force;
+        let fy = (dy / dist) * force;
+
+        this.atom1.vx += fx * dt;
+        this.atom1.vy += fy * dt;
+        this.atom2.vx -= fx * dt;
+        this.atom2.vy -= fy * dt;
+      }
+
+      applyVanDerWaalsForce(other, dt) {
+        for (let a1 of [this.atom1, this.atom2]) {
+          for (let a2 of [other.atom1, other.atom2]) {
+            let dx = a2.x - a1.x;
+            let dy = a2.y - a1.y;
+            let r = Math.sqrt(dx * dx + dy * dy);
+            if (r < 2 * bondLength && r > 1) {
+              // Lennard-Jones potential force
+              let F = (24 * epsilon / r) * (2 * (sigma / r) ** 12 - (sigma / r) ** 6);
+              let fx = F * (dx / r);
+              let fy = F * (dy / r);
+              a1.vx -= fx * dt;
+              a1.vy -= fy * dt;
+              a2.vx += fx * dt;
+              a2.vy += fy * dt;
+            }
+          }
+        }
+      }
+
+      draw() {
+        ctx.beginPath();
+        ctx.moveTo(this.atom1.x, this.atom1.y);
+        ctx.lineTo(this.atom2.x, this.atom2.y);
+        ctx.strokeStyle = 'white';
+        ctx.stroke();
+        this.atom1.draw();
+        this.atom2.draw();
+      }
+    }
+
+    for (let i = 0; i < numMolecules; i++) {
+      molecules.push(new Molecule());
+    }
+
+    let lastTime = performance.now();
+    function animate(time) {
+      let dt = (time - lastTime) / 1000;
+      lastTime = time;
+
+      ctx.clearRect(0, 0, width, height);
+
+      for (let i = 0; i < molecules.length; i++) {
+        for (let j = i + 1; j < molecules.length; j++) {
+          molecules[i].applyVanDerWaalsForce(molecules[j], dt);
+        }
+      }
+
+      for (let m of molecules) {
+        m.update(dt);
+        m.draw();
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    animate(lastTime);
+  </script>
+</body>
+</html>
